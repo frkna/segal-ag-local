@@ -366,7 +366,7 @@ def download_file(filename):
 @app.route('/reset_password', methods=['POST'])
 def reset_password():
     try:
-        username = request.form.get('username')
+        username = request.form.get('username2')
         new_password = request.form.get('new_password')
 
         if not username or not new_password:
@@ -389,8 +389,11 @@ def delete_room(room_id):
     if current_user.role != 'idare':
         return jsonify({'error': 'Yetkisiz işlem'}), 403
 
-    room = Room.query.get(room_id)
+    room = db.session.get(Room, room_id)
     if room:
+        # Delete all messages associated with the room
+        Message.query.filter_by(room_id=room_id).delete()
+        
         db.session.delete(room)
         db.session.commit()
         return jsonify({'success': True})
