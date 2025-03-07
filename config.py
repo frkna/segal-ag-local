@@ -2,8 +2,13 @@ import os
 
 class Config:
     # Veritabanı yapılandırması
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or "postgresql://segal_ag_database_xed7_user:NpGUwfDy84y0qPVZhRGDTXeM2qLmgPjY@dpg-cv4nts8gph6c739312vg-a.frankfurt-postgres.render.com/segal_ag_database_xed7"
+    SQLALCHEMY_DATABASE_URI = "postgresql://postgres:d%&Ql_)SAvdSbNGd5qv9f5#9{@localhost/segal-ag-db"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    HOST = "localhost"
+    PORT = "5432"
+    USER = "postgres"
+    PASSWORD = "d%&Ql_)SAvdSbNGd5qv9f5#9{"
+    DBNAME = "segal-ag-db"
     
     # Flask-SocketIO yapılandırması
     SECRET_KEY = os.urandom(24)
