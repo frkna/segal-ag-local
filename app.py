@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, send_from_directory
+from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from database import db, User, Room, Message, UserRole
+from database import db, User, Room, Message, UserRole, ScheduleFile
 from config import Config
 import os
 from werkzeug.utils import secure_filename
@@ -17,6 +17,9 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
 # Uploads klasörünü oluştur
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
+
+app.config['SCHEDULES'] = os.path.join(app.root_path, 'ders programları')
+os.makedirs(app.config['SCHEDULES'], exist_ok=True)
 
 # Veritabanı ve SocketIO'yu başlat
 db.init_app(app)
@@ -48,14 +51,25 @@ def login():
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
         
-        if user and user.check_password(password):
+        if user and user.check_password(password) and user.last_seen is not None or user and user.password_hash == password and user.last_seen is not None:
+            if user.ip_address == request.remote_addr or user.username == "admin":
+                user.update_last_seen()
+                user.is_active = True
+                db.session.commit()
+                login_user(user)
+                return redirect(url_for('index'))
+            else:
+                flash("Ip adresi uygun değil", "error")
+
+        elif user and user.check_password(password) and user.last_seen is None:
             user.update_last_seen()
             user.is_active = True
+            user.ip_address = request.remote_addr
             db.session.commit()
             login_user(user)
             return redirect(url_for('index'))
-        
-        flash('Geçersiz kullanıcı adı veya şifre', 'error')
+        else:
+            flash('Geçersiz kullanıcı adı veya şifre', 'error')
     return render_template('login.html')
 
 # Çıkış
@@ -437,6 +451,55 @@ def on_join(data):
         }, room=room)
         emit('play_sound', {'message': 'New message received!'}, broadcast=True)
 
+@app.route('/rooms/<int:room_id>/upload', methods=['POST'])
+def upload_schedule(room_id):
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['SCHEDULES'], filename)
+
+        # Check if a schedule file already exists for the room
+        existing_file = ScheduleFile.query.filter_by(room_id=room_id).first()
+        
+        if existing_file:
+            # If a file exists, delete it from the filesystem
+            existing_file_path = os.path.join(app.config['SCHEDULES'], existing_file.filename)
+            if os.path.exists(existing_file_path):
+                os.remove(existing_file_path)  # Remove the old file
+
+            # Update the existing entry in the database
+            existing_file.filename = filename
+        else:
+            # If no file exists, create a new entry
+            existing_file = ScheduleFile(room_id=room_id, filename=filename)
+            db.session.add(existing_file)
+
+        # Save the new file
+        file.save(file_path)
+
+        # Commit the changes to the database
+        db.session.commit()
+
+        return jsonify({'success': True}), 200
+    else:
+        return jsonify({'error': 'File type not allowed'}), 400
+
+def allowed_file(filename):
+    allowed_extensions = {'xls', 'xlsx'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+@app.route('/rooms/<int:room_id>/files', methods=['GET'])
+def get_uploaded_schedules(room_id):
+    files = ScheduleFile.query.filter_by(room_id=room_id).all()
+    return jsonify([{'id': file.id, 'filename': file.filename} for file in files]), 200
+
 
 @socketio.on('connect')
 def on_connect():
@@ -451,6 +514,7 @@ def on_connect():
 
 @socketio.on('disconnect')
 def on_disconnect():
+    current_user.update_last_seen()
     emit('message', {
         'user': 'Sistem',
         'content': f'{current_user.username} çıkış yaptı',
@@ -480,7 +544,7 @@ def on_message(data):
         'content': message_content,
         'timestamp': message.created_at.strftime('%H:%M')
     }, room=room_id)
-    emit('play_sound', {'message': 'New message received!'}, broadcast=True)
+    emit('play_sound', {'message': 'Yeni mesaj alındı!'}, broadcast=True)
 
 # Veritabanını oluştur
 def init_db():
@@ -502,4 +566,4 @@ def init_db():
 
 if __name__ == '__main__':
     init_db()
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)

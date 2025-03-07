@@ -9,7 +9,7 @@ db = SQLAlchemy()
 class UserRole:
     ADMIN = 'idare'
     TEACHER = 'öğretmen'
-    STUDENT = 'öğrenci'
+    STUDENT = 'sınıf'
 
 # Oda üyeliği tablosu (Many-to-Many ilişki için)
 room_members = db.Table('room_members',
@@ -18,18 +18,30 @@ room_members = db.Table('room_members',
     db.Column('joined_at', db.DateTime, default=datetime.utcnow)
 )
 
+
+class ScheduleFile(db.Model):
+    __tablename__ = 'schedules'
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def __repr__(self):
+        return f'<ScheduleFile {self.filename}>'
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    ip_address = db.Column(db.String(50), nullable=True)
     email = db.Column(db.String(120), nullable=True) 
     full_name = db.Column(db.String(100), nullable=True)
     role = db.Column(db.String(20), nullable=False) 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=False)
-    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen = db.Column(db.DateTime, nullable=True, default=None)
+    
     
     # İlişkiler
     messages = db.relationship('Message', backref='author', lazy=True)

@@ -42,12 +42,18 @@
 <body class="bg-gray-50">
     <audio id="notification-sound" src="/static/sound/notification.mp3" preload="auto"></audio>
     <script>
+
         var socket = io();
         socket.on('play_sound', function (data) {
             var audio = document.getElementById('notification-sound');
             audio.play();
         });
+
+        // Request permission for notifications
+
     </script>
+
+
     <div class="h-screen flex">
         <!-- Sol Sidebar - Odalar -->
         <div class="w-64 bg-white border-r border-gray-200 sidebar-container">
@@ -113,7 +119,7 @@
                 <!-- Mesajlar buraya gelecek -->
             </div>
 
-            {% if current_user.role not in ['öğrenci'] %}
+            {% if current_user.role not in ['sınıf'] %}
             <!-- Mesaj ve Dosya Gönderme Formu -->
             <div class="p-4 border-t border-gray-200 bg-white">
                 <form id="messageForm" class="space-y-3">
@@ -212,14 +218,14 @@
                         }
 
                         messageDiv.innerHTML = `
-                            <div class="flex justify-between items-start">
-                                <div class="flex items-center space-x-2">
-                                    <span class="font-medium text-gray-900">${msg.user}</span>
-                                    <span class="text-sm text-gray-500">${msg.timestamp}</span>
-                                </div>
-                            </div>
-                            <div class="mt-2 text-gray-700">${messageContent}</div>
-                        `;
+            <div class="flex justify-between items-start">
+                <div class="flex items-center space-x-2">
+                    <span class="font-medium text-gray-900">${msg.user}</span>
+                    <span class="text-sm text-gray-500">${msg.timestamp}</span>
+                </div>
+            </div>
+            <div class="mt-2 text-gray-700">${messageContent}</div>
+            `;
 
                         messagesDiv.appendChild(messageDiv);
                     });
@@ -248,13 +254,13 @@
             }
 
             messageDiv.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div class="flex items-center space-x-2">
-                        <span class="font-medium text-gray-900">${data.user}</span>
-                        <span class="text-sm text-gray-500">${data.timestamp}</span>
-                    </div>
+            <div class="flex justify-between items-start">
+                <div class="flex items-center space-x-2">
+                    <span class="font-medium text-gray-900">${data.user}</span>
+                    <span class="text-sm text-gray-500">${data.timestamp}</span>
                 </div>
-                <div class="mt-2 text-gray-700">${messageContent}</div>
+            </div>
+            <div class="mt-2 text-gray-700">${messageContent}</div>
             `;
 
             messagesDiv.appendChild(messageDiv);
@@ -268,7 +274,7 @@
             }, 50);
         }
 
-        {% if current_user.role not in ['öğrenci'] %}
+        {% if current_user.role not in ['sınıf'] %}
         // Mesaj gönderme
         messageForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -320,6 +326,7 @@
 
         // Mesaj alma
         socket.on('message', function (data) {
+            console.log('Received message data:', data); // Debugging statement
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = 'bg-white rounded-lg p-4 shadow-sm';
@@ -335,17 +342,28 @@
             }
 
             messageDiv.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div class="flex items-center space-x-2">
-                        <span class="font-medium text-gray-900">${data.user}</span>
-                        <span class="text-sm text-gray-500">${data.timestamp}</span>
-                    </div>
+            <div class="flex justify-between items-start">
+                <div class="flex items-center space-x-2">
+                    <span class="font-medium text-gray-900">${data.user}</span>
+                    <span class="text-sm text-gray-500">${data.timestamp}</span>
                 </div>
-                <div class="mt-2 text-gray-700">${messageContent}</div>
+            </div>
+            <div class="mt-2 text-gray-700">${messageContent}</div>
             `;
 
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            if (Notification.permission === "granted") {
+                console.log("Selam!")
+                const notification = new Notification(data.user, {
+                    body: data.content
+                });
+
+                notification.onclick = function () {
+                    window.focus();
+                    this.close();
+                };
+            }
         });
 
         // Oda güncellemeleri için event'ler
@@ -375,7 +393,7 @@
             if (roomButton) {
                 if (currentRoom === data.room_id) {
                     currentRoom = null;
-                    {% if current_user.role not in ['öğrenci'] %}
+                    {% if current_user.role not in ['sınıf'] %}
                     messageInput.disabled = true;
                     messageForm.querySelector('button').disabled = true;
                     {% endif %}
