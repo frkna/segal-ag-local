@@ -1,0 +1,2 @@
+Set WshShell = CreateObject("WScript.Shell") 
+WshShell.Run "pythonw C:\Users\user\Desktop\demogithubrepo\segal-ag-local\auto-start.pyw", 0, False
