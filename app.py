@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 from flask_wtf.csrf import generate_csrf
+import pandas as pd
 # Flask uygulamasını oluştur
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -546,23 +547,109 @@ def on_message(data):
     }, room=room_id)
     emit('play_sound', {'message': 'Yeni mesaj alındı!'}, broadcast=True)
 
-# Veritabanını oluştur
 def init_db():
     with app.app_context():
-        db.create_all()
-        
-        # İlk admin kullanıcısını oluştur (eğer yoksa)
-        admin = User.query.filter_by(role=UserRole.ADMIN).first()
-        if not admin:
-            admin = User(
-                username='admin',
-                email='admin@okul.com',
-                full_name='Sistem Yöneticisi',
-                role=UserRole.ADMIN
-            )
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
+        db.create_all()  # Create all tables
+
+        # List of admin users to create
+        admin_users = [
+            {
+                'username': 'metinsözer',
+                'email': 'admin1@okul.com',
+                'full_name': 'Metin Sözer',
+                'password': '123'
+            },
+            {
+                'username': 'özenözcan',
+                'email': 'admin2@okul.com',
+                'full_name': 'Özen Özcan',
+                'password': '123'
+            },
+            {
+                'username': 'zekeriyakıldırıcı',
+                'email': 'admin3@okul.com',
+                'full_name': 'Zekeriya Kıldırıcı',
+                'password': '123'
+            }
+        ]
+
+        for user_data in admin_users:
+            # Check if the user already exists
+            existing_user = User.query.filter_by(username=user_data['username']).first()
+            if not existing_user:
+                # Create a new admin user
+                admin_user = User(
+                    username=user_data['username'],
+                    email=user_data['email'],
+                    full_name=user_data['full_name'],
+                    role=UserRole.ADMIN
+                )
+                admin_user.set_password(user_data['password'])  # Assuming you have a method to set the password
+                db.session.add(admin_user)
+
+        db.session.commit()  # Commit the changes to the database
+
+@app.route('/rooms/<int:room_id>/current_class')
+@login_required
+def current_class(room_id):
+    room = db.session.get(Room, room_id)
+    if not room:
+        return jsonify({'error': 'Room not found'}), 404
+
+    # Get the current class name and teacher's name based on the schedule file
+    current_class_name, current_teacher = get_current_class_info(room)
+    return jsonify({'name': current_class_name, 'teacher': current_teacher})
+
+def get_current_class_info(room):
+    # Get the current time
+    current_time = datetime.now().time()
+
+    # Define the lunch break time range
+    lunch_start = datetime.strptime("13:00:00", "%H:%M:%S").time()
+    lunch_end = datetime.strptime("13:45:00", "%H:%M:%S").time()
+
+    # Check if the current time is within the lunch break
+    if lunch_start <= current_time <= lunch_end:
+        return "ÖĞLE ARASI", ""  # Return "ÖĞLE ARASI" and empty teacher name
+    # Load the schedule file for the room
+    schedule_file = ScheduleFile.query.filter_by(room_id=room.id).first()
+    if not schedule_file:
+        return "Ders yok", ""  # No schedule file found
+
+    # Define the path to the schedule file
+    file_path = os.path.join(app.config['SCHEDULES'], schedule_file.filename)
+
+    # Read the Excel file
+    try:
+        df = pd.read_excel(file_path, engine='openpyxl')  # Use openpyxl to read .xlsx files
+    except Exception as e:
+        print(f"Error reading the Excel file: {e}")
+        return "Ders yok", ""  # Return "Ders yok" and empty teacher name
+
+    # Convert 'Başlangıç' and 'Bitiş' columns to datetime.time
+    df['Başlangıç'] = pd.to_datetime(df['Başlangıç'], format='%H:%M:%S', errors='coerce').dt.time
+    df['Bitiş'] = pd.to_datetime(df['Bitiş'], format='%H:%M:%S', errors='coerce').dt.time
+
+    # Iterate through the rows to find the current class
+    for index, row in df.iterrows():
+        start_time = row['Başlangıç']  # This should now be a datetime.time object
+        end_time = row['Bitiş']  # This should also be a datetime.time object
+        class_name = row['Ders']  # Assuming 'Ders' is the class name column
+        teacher_name = row['Öğretmen']  # Get the teacher's name
+
+        # Combine the current date with the start and end times
+        start_datetime = datetime.combine(datetime.now().date(), start_time)
+        end_datetime = datetime.combine(datetime.now().date(), end_time)
+
+        # If the end time is less than the start time, it means it goes past midnight
+        if end_time < start_time:
+            end_datetime += timedelta(days=1)  # Move the end time to the next day
+
+        # Check if the current time is within the start and end time
+        if start_datetime <= datetime.now() <= end_datetime:
+            return class_name, teacher_name  # Return the current class name and teacher's name
+
+    return "Ders yok", ""  # No class currently, return "Ders yok" and empty teacher name
 
 if __name__ == '__main__':
     init_db()
