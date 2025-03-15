@@ -36,6 +36,16 @@
             flex: 1;
             overflow-y: auto;
         }
+
+        .message {
+            background-color: white;
+            padding: 10px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 
@@ -269,9 +279,8 @@
 
         // En alta kaydırma fonksiyonu
         function scrollToBottom() {
-            setTimeout(() => {
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            }, 50);
+            const chatContainer = document.getElementById('messages');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
         {% if current_user.role not in ['sınıf'] %}
@@ -326,12 +335,11 @@
 
         // Mesaj alma
         socket.on('message', function (data) {
-            console.log('Received message data:', data); // Debugging statement
-            const messagesDiv = document.getElementById('messages');
+            // Simplified message handling without seen status
             const messageDiv = document.createElement('div');
             messageDiv.className = 'bg-white rounded-lg p-4 shadow-sm';
 
-            let messageContent = data.content; // Updated to use the correct emitted key
+            let messageContent = data.content;
             if (data.is_file) {
                 messageContent = `<a href="/download/${data.file_path}" class="text-blue-600 hover:text-blue-800 flex items-center space-x-2" download>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -352,17 +360,19 @@
             `;
 
             messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            if (Notification.permission === "granted") {
-                console.log("Selam!")
-                const notification = new Notification(data.user, {
-                    body: data.content
-                });
+            scrollToBottom();
 
-                notification.onclick = function () {
-                    window.focus();
-                    this.close();
-                };
+            if (data.user != "{{ current_user.username }}") {
+                if (Notification.permission === "granted") {
+                    const notification = new Notification(data.user, {
+                        body: data.content
+                    });
+
+                    notification.onclick = function () {
+                        window.focus();
+                        this.close();
+                    };
+                }
             }
         });
 

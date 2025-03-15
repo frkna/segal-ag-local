@@ -12,6 +12,8 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+
+        /* Add any additional custom styles here */
     </style>
 </head>
 
@@ -37,18 +39,17 @@
         <div class="bg-white rounded-lg shadow-sm overflow-hidden">
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 mb-4">Yeni Oda Oluştur</h2>
-                <form method="POST" class="space-y-4">
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <label for="name" class="block text-sm font-medium text-gray-700">Oda Adı</label>
-                            <input type="text" name="name" id="name" required
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        </div>
-                        <div>
-                            <label for="description" class="block text-sm font-medium text-gray-700">Açıklama</label>
-                            <input type="text" name="description" id="description" required
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        </div>
+                <form method="POST" action="/rooms" id="createRoomForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="mb-4">
+                        <label for="name" class="block text-sm font-medium text-gray-700">Oda Adı</label>
+                        <input type="text" name="name" id="name" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="description" class="block text-sm font-medium text-gray-700">Açıklama</label>
+                        <input type="text" name="description" id="description" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     </div>
                     <div class="flex justify-end">
                         <button type="submit"
@@ -56,6 +57,14 @@
                             Oda Oluştur
                         </button>
                     </div>
+                    <noscript>
+                        <div class="mt-4">
+                            <button type="submit"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                                Oda Oluştur (JavaScript Devre Dışı)
+                            </button>
+                        </div>
+                    </noscript>
                 </form>
             </div>
         </div>
@@ -127,9 +136,6 @@
                                         class="hidden text-red-600 hover:text-red-900 cancel-btn">İptal</button>
                                     <button onclick="manageMembers(this)"
                                         class="px-3 py-1 text-purple-600 hover:text-purple-900">Üyeleri Yönet</button>
-                                    <button onclick="openUploadModal({{ room.id }})"
-                                        class="px-3 py-1 text-yellow-600 hover:text-yellow-900">Ders
-                                        Programı</button>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <button onclick="deleteRoom({{ room.id }})"
@@ -140,6 +146,28 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-white rounded-lg shadow-sm overflow-hidden">
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">Ders Programı Yükle</h2>
+                <form id="uploadScheduleForm" enctype="multipart/form-data">
+                    <div>
+                        <label for="scheduleFile" class="block text-sm font-medium text-gray-700 flex items-center">
+                            <i class="fas fa-paperclip mr-2"></i>
+                            Excel Dosyası Seçin
+                        </label>
+                        <input type="file" id="scheduleFile" name="file" accept=".xls,.xlsx" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            Ders Programı Yükle
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -175,42 +203,6 @@
                         <!-- Üyeler buraya dinamik olarak eklenecek -->
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Excel Upload Modal -->
-    <div id="uploadModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
-        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Excel Dosyası Yükle</h3>
-                <button onclick="closeUploadModal()" class="text-gray-400 hover:text-gray-500">
-                    <span class="sr-only">Kapat</span>
-                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <form id="uploadForm" enctype="multipart/form-data">
-                <input type="hidden" id="uploadRoomId" name="roomId">
-                <div>
-                    <label for="excelFile" class="block text-sm font-medium text-gray-700 flex items-center">
-                        <i class="fas fa-paperclip mr-2"></i>
-                        Excel Dosyası Seçin
-                    </label>
-                    <input type="file" id="excelFile" name="file" accept=".xls,.xlsx" required
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                </div>
-                <div class="mt-4 flex justify-end">
-                    <button type="submit"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                        Yükle
-                    </button>
-                </div>
-            </form>
-            <div id="uploadedFileList" class="mt-4">
-                <!-- Uploaded files will be displayed here -->
             </div>
         </div>
     </div>
@@ -473,55 +465,6 @@
             }
         }
 
-        function openUploadModal(roomId) {
-            document.getElementById('uploadRoomId').value = roomId; // Set the room ID
-            document.getElementById('uploadModal').classList.remove('hidden');
-
-            fetchUploadedFiles(roomId);
-        }
-
-        function closeUploadModal() {
-            document.getElementById('uploadModal').classList.add('hidden'); // Hide the modal
-        }
-
-        document.getElementById('uploadForm').onsubmit = async function (event) {
-            event.preventDefault(); // Prevent default form submission
-            const formData = new FormData(this);
-            const roomId = document.getElementById('uploadRoomId').value;
-
-            try {
-                const response = await fetch(`/rooms/${roomId}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await response.json();
-                if (response.ok) {
-                    alert('Dosya başarıyla yüklendi.');
-                    closeUploadModal(); // Close the modal
-                    await fetchCurrentClassNames(); // After successfully uploading the schedule, fetch the current class names
-                } else {
-                    alert(result.error || 'Bir hata oluştu');
-                }
-            } catch (error) {
-                alert('Bir hata oluştu: ' + error);
-            }
-        };
-        async function fetchUploadedFiles(roomId) {
-            // Fetch uploaded files for the room
-            try {
-                const response = await fetch(`/rooms/${roomId}/files`);
-                if (response.ok) {
-                    const files = await response.json();
-                    displayUploadedFiles(files);
-                } else {
-                    console.error('Failed to fetch files:', response.statusText);
-                }
-            } catch (error) {
-                console.error('Error fetching uploaded files:', error);
-            }
-        }
-
         async function fetchCurrentClassNames() {
             const roomElements = document.querySelectorAll('tr[data-room-id]');
 
@@ -552,6 +495,69 @@
         // Call this function every minute (60000 milliseconds)
         setInterval(fetchCurrentClassNames, 60000);
         fetchCurrentClassNames(); // Initial call to populate class names
+
+        document.getElementById('uploadScheduleForm').onsubmit = async function (event) {
+            event.preventDefault(); // Prevent default form submission
+            const formData = new FormData(this);
+
+            try {
+                const response = await fetch('/upload_schedule', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    location.reload(); // Refresh the page to see changes
+                } else {
+                    alert(result.error || 'Bir hata oluştu');
+                }
+            } catch (error) {
+                alert('Bir hata oluştu: ' + error);
+            }
+        };
+
+        document.getElementById('createRoomForm').onsubmit = async function (event) {
+            event.preventDefault(); // Prevent default form submission
+            const formData = new FormData(this);
+
+            // Add CSRF token if it's not already in the form
+            if (!formData.has('csrf_token')) {
+                const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+                formData.append('csrf_token', csrfToken);
+            }
+
+            try {
+                const response = await fetch('/rooms', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest' // Add this to indicate AJAX request
+                    }
+                });
+
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const result = await response.json();
+                    if (response.ok) {
+                        alert('Oda başarıyla oluşturuldu!');
+                        location.reload(); // Refresh the page to see the new room
+                    } else {
+                        alert(result.error || 'Bir hata oluştu');
+                    }
+                } else {
+                    // If not JSON, handle as text
+                    const text = await response.text();
+                    console.error('Server returned non-JSON response:', text);
+                    alert('Sunucu beklenmeyen bir yanıt döndürdü. Lütfen daha sonra tekrar deneyin.');
+                }
+            } catch (error) {
+                console.error('Error during form submission:', error);
+                alert('Bir hata oluştu: ' + error);
+            }
+        };
 
     </script>
 </body>

@@ -18,6 +18,10 @@ room_members = db.Table('room_members',
     db.Column('joined_at', db.DateTime, default=datetime.utcnow)
 )
 
+seen_messages = db.Table('seen_messages',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id')),
+    db.Column('message_id', db.Integer, db.ForeignKey('messages.id'))
+)
 
 class ScheduleFile(db.Model):
     __tablename__ = 'schedules'
@@ -83,25 +87,17 @@ class Room(db.Model):
     
     # İlişkiler
     messages = db.relationship('Message', backref='room', lazy=True)
+    schedules = db.relationship('ScheduleFile', backref='room', cascade='all, delete-orphan')
 
 class Message(db.Model):
     __tablename__ = 'messages'
     
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.Text, nullable=False)
-    file_path = db.Column(db.String(255))  # Dosya yolu
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    file_path = db.Column(db.String(255))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'), nullable=False)
-    is_system_message = db.Column(db.Boolean, default=False)  # Katılma/ayrılma bildirimleri için
+    room_id = db.Column(db.Integer, db.ForeignKey('rooms.id'))
     
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'content': self.content,
-            'created_at': self.created_at.isoformat(),
-            'user_id': self.user_id,
-            'room_id': self.room_id,
-            'author': self.author.username,
-            'is_system_message': self.is_system_message
-        }
+    def __repr__(self):
+        return f'<Message {self.id}>'

@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 from flask_wtf.csrf import generate_csrf
 import pandas as pd
+from schedule_convert import parse_schedule
+import re
+
 # Flask uygulamasını oluştur
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -42,7 +45,7 @@ def index():
     rooms = db.session.query(Room).filter(
         Room.members.any(id=current_user.id)
     ).all()
-    return render_template('index.html', rooms=rooms)
+    return render_template('index.html', rooms=rooms, current_user=current_user)
 
 # Giriş sayfası
 @app.route('/login', methods=['GET', 'POST'])
@@ -85,30 +88,21 @@ def logout(user_id):
     return redirect(url_for('login'))
 
 # Oda yönetimi (sadece admin)
-@app.route('/rooms', methods=['GET', 'POST'])
+@app.route('/manage_rooms', methods=['GET'])
 @login_required
 def manage_rooms():
     if not current_user.can_manage_rooms():
         flash('Bu sayfaya erişim yetkiniz yok', 'error')
         return redirect(url_for('index'))
     
-    if request.method == 'POST':
-        name = request.form.get('name')
-        description = request.form.get('description')
-        
-        room = Room(
-            name=name,
-            description=description,
-            creator_id=current_user.id
-        )
-        db.session.add(room)
-        db.session.commit()
-        
-        flash('Oda başarıyla oluşturuldu', 'success')
-        return redirect(url_for('manage_rooms'))
+    rooms = db.session.query(Room).all()
+    for room in rooms:
+        room.current_class_name, room.current_teacher = get_current_class_info(room)
     
-    rooms = Room.query.all()
-    return render_template('manage_rooms.html', rooms=rooms, csrf_token=generate_csrf())
+    # Generate CSRF token
+    csrf_token = generate_csrf()
+    
+    return render_template('manage_rooms.html', rooms=rooms, csrf_token=csrf_token, extract_class_from_room_name=extract_class_from_room_name)
 
 # Kullanıcı yönetimi (sadece admin)
 @app.route('/users', methods=['GET', 'POST'])
@@ -217,6 +211,48 @@ def edit_room(room_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+# Oda yönetimi (sadece admin)
+@app.route('/rooms', methods=['POST'])
+@login_required
+def create_room():
+    if not current_user.can_manage_rooms():
+        return jsonify({'error': 'Bu işlem için yetkiniz yok'}), 403
+    
+    name = request.form.get('name')
+    description = request.form.get('description')
+
+    if not name or not description:
+        return jsonify({'error': 'Oda adı ve açıklama gereklidir.'}), 400
+
+    new_room = Room(name=name, description=description, creator=current_user)
+    db.session.add(new_room)
+    
+    try:
+        db.session.commit()  # Commit to get the new room ID
+        
+        # Find the latest schedule file
+        latest_schedule = ScheduleFile.query.order_by(ScheduleFile.id.desc()).first()
+        
+        # If a schedule file exists, assign it to the new room
+        if latest_schedule:
+            new_schedule = ScheduleFile(room_id=new_room.id, filename=latest_schedule.filename)
+            db.session.add(new_schedule)
+            db.session.commit()
+        
+        # Check if the request expects JSON
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'room_id': new_room.id}), 201
+        else:
+            flash('Oda başarıyla oluşturuldu!', 'success')
+            return redirect(url_for('manage_rooms'))
+    except Exception as e:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': f'Oda oluşturulurken bir hata oluştu: {str(e)}'}), 500
+        else:
+            flash(f'Oda oluşturulurken bir hata oluştu: {str(e)}', 'error')
+            return redirect(url_for('manage_rooms'))
 
 # Odaya kullanıcı ekleme/çıkarma
 @app.route('/rooms/<int:room_id>/members', methods=['POST'])
@@ -351,7 +387,7 @@ def upload_file():
                 'is_file': True,
                 'timestamp': datetime.now().strftime('%H:%M')
             }, room=room_id)
-            socketio.emit('play_sound', {'message': 'New message received!'}, room=room_id)
+            socketio.emit('play_sound', {'message': 'Yeni dosya alındı!'}, room=room_id)
             
             return jsonify({
                 'success': True,
@@ -404,16 +440,24 @@ def delete_room(room_id):
     if current_user.role != 'idare':
         return jsonify({'error': 'Yetkisiz işlem'}), 403
 
-    room = db.session.get(Room, room_id)
-    if room:
-        # Delete all messages associated with the room
-        Message.query.filter_by(room_id=room_id).delete()
-        
-        db.session.delete(room)
-        db.session.commit()
-        return jsonify({'success': True})
-    else:
-        return jsonify({'error': 'Oda bulunamadı'}), 404
+    try:
+        room = db.session.get(Room, room_id)
+        if room:
+            # Delete all schedules associated with the room
+            ScheduleFile.query.filter_by(room_id=room_id).delete()  # Assuming ScheduleFile is the model for schedules
+            
+            # Delete all messages associated with the room
+            Message.query.filter_by(room_id=room_id).delete()
+            
+            db.session.delete(room)
+            db.session.commit()
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Oda bulunamadı'}), 404
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting room: {str(e)}")
+        return jsonify({'error': f'Oda silinirken bir hata oluştu: {str(e)}'}), 500
 
 # Kullanıcı silme
 @app.route('/delete_user/<int:user_id>', methods=['DELETE'])
@@ -450,10 +494,11 @@ def on_join(data):
             'content': f'{current_user.username} odaya katıldı',
             'timestamp': datetime.now().strftime('%H:%M')
         }, room=room)
-        emit('play_sound', {'message': 'New message received!'}, broadcast=True)
+        emit('play_sound', {'message': 'Kullanıcı katıldı!'}, broadcast=True)
 
-@app.route('/rooms/<int:room_id>/upload', methods=['POST'])
-def upload_schedule(room_id):
+@app.route('/upload_schedule', methods=['POST'])
+@login_required
+def upload_schedule():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
 
@@ -466,41 +511,30 @@ def upload_schedule(room_id):
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config['SCHEDULES'], filename)
 
-        # Check if a schedule file already exists for the room
-        existing_file = ScheduleFile.query.filter_by(room_id=room_id).first()
-        
-        if existing_file:
-            # If a file exists, delete it from the filesystem
-            existing_file_path = os.path.join(app.config['SCHEDULES'], existing_file.filename)
-            if os.path.exists(existing_file_path):
-                os.remove(existing_file_path)  # Remove the old file
-
-            # Update the existing entry in the database
-            existing_file.filename = filename
-        else:
-            # If no file exists, create a new entry
-            existing_file = ScheduleFile(room_id=room_id, filename=filename)
-            db.session.add(existing_file)
-
-        # Save the new file
+        # Save the uploaded file
         file.save(file_path)
+
+        # Update each room with the new schedule
+        for room in Room.query.all():
+            existing_file = ScheduleFile.query.filter_by(room_id=room.id).first()
+            if existing_file:
+                # Update the existing entry in the database
+                existing_file.filename = filename
+            else:
+                # If no file exists, create a new entry
+                existing_file = ScheduleFile(room_id=room.id, filename=filename)
+                db.session.add(existing_file)
 
         # Commit the changes to the database
         db.session.commit()
 
-        return jsonify({'success': True}), 200
+        return jsonify({'success': True, 'message': 'Ders programı başarıyla yüklendi'}), 200
     else:
         return jsonify({'error': 'File type not allowed'}), 400
 
 def allowed_file(filename):
     allowed_extensions = {'xls', 'xlsx'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
-
-@app.route('/rooms/<int:room_id>/files', methods=['GET'])
-def get_uploaded_schedules(room_id):
-    files = ScheduleFile.query.filter_by(room_id=room_id).all()
-    return jsonify([{'id': file.id, 'filename': file.filename} for file in files]), 200
-
 
 @socketio.on('connect')
 def on_connect():
@@ -540,13 +574,20 @@ def on_message(data):
     db.session.add(message)
     db.session.commit()
     
+    # Emit the message to the room without seen status information
     emit('message', {
         'user': current_user.username,
         'content': message_content,
-        'timestamp': message.created_at.strftime('%H:%M')
+        'timestamp': message.created_at.strftime('%H:%M'),
+        'message_id': message.id,
+        'is_offline': not current_user.is_authenticated  # Keep this if needed
     }, room=room_id)
-    emit('play_sound', {'message': 'Yeni mesaj alındı!'}, broadcast=True)
 
+    # Send notification only to other users in the room
+    if current_user.is_authenticated:
+        emit('play_sound', {'message': 'Yeni mesaj alındı!'}, room=room_id, skip_sid=request.sid)  # Skip the sender
+
+# Veritabanını oluştur
 def init_db():
     with app.app_context():
         db.create_all()  # Create all tables
@@ -601,55 +642,269 @@ def current_class(room_id):
     return jsonify({'name': current_class_name, 'teacher': current_teacher})
 
 def get_current_class_info(room):
-    # Get the current time
-    current_time = datetime.now().time()
-
+    # Get the current time and day
+    now = datetime.now()
+    current_time = now.time()
+    current_day = now.strftime('%A')  # Get the current day name in English
+    
+    # Map English day names to Turkish
+    day_map = {
+        'Monday': 'Pazartesi',
+        'Tuesday': 'Salı',
+        'Wednesday': 'Çarşamba',
+        'Thursday': 'Perşembe',
+        'Friday': 'Cuma',
+        'Saturday': 'Cumartesi',
+        'Sunday': 'Pazar'
+    }
+    
+    current_day_turkish = day_map.get(current_day, '')
+    
+    # If it's Sunday, return "Ders yok"
+    if current_day_turkish == 'Pazar':
+        return "Ders yok", ""
+    
     # Define the lunch break time range
-    lunch_start = datetime.strptime("13:00:00", "%H:%M:%S").time()
-    lunch_end = datetime.strptime("13:45:00", "%H:%M:%S").time()
+    lunch_start = datetime.strptime("12:00:00", "%H:%M:%S").time()
+    lunch_end = datetime.strptime("12:45:00", "%H:%M:%S").time()
 
     # Check if the current time is within the lunch break
     if lunch_start <= current_time <= lunch_end:
         return "ÖĞLE ARASI", ""  # Return "ÖĞLE ARASI" and empty teacher name
-    # Load the schedule file for the room
+
+    # Get the schedule file
     schedule_file = ScheduleFile.query.filter_by(room_id=room.id).first()
     if not schedule_file:
         return "Ders yok", ""  # No schedule file found
 
-    # Define the path to the schedule file
-    file_path = os.path.join(app.config['SCHEDULES'], schedule_file.filename)
-
-    # Read the Excel file
+    # Parse the schedule data
     try:
-        df = pd.read_excel(file_path, engine='openpyxl')  # Use openpyxl to read .xlsx files
+        file_path = os.path.join(app.config['SCHEDULES'], schedule_file.filename)
+        schedule_data = parse_schedule(file_path)
     except Exception as e:
-        print(f"Error reading the Excel file: {e}")
-        return "Ders yok", ""  # Return "Ders yok" and empty teacher name
+        return "Ders yok", ""  # Error parsing schedule
 
-    # Convert 'Başlangıç' and 'Bitiş' columns to datetime.time
-    df['Başlangıç'] = pd.to_datetime(df['Başlangıç'], format='%H:%M:%S', errors='coerce').dt.time
-    df['Bitiş'] = pd.to_datetime(df['Bitiş'], format='%H:%M:%S', errors='coerce').dt.time
+    # Extract the class name from the room name
+    room_class = extract_class_from_room_name(room.name)
+    
+    # If no class name could be extracted (e.g., "demo"), return "Ders yok"
+    if not room_class:
+        return "Ders yok", ""
+    
+    # Try different formats of the class name for matching
+    possible_class_formats = []
+    if room_class:
+        # Original format
+        possible_class_formats.append(room_class)
+        
+        # Without separator
+        possible_class_formats.append(room_class.replace('/', ''))
+        
+        # With different separators
+        possible_class_formats.append(room_class.replace('/', '-'))
+        possible_class_formats.append(room_class.replace('/', ' '))
+        
+        # Different case
+        possible_class_formats.append(room_class.upper())
+        possible_class_formats.append(room_class.lower())
+    
+    # Filter schedule data for the current day and matching class
+    current_schedule = []
+    for entry in schedule_data:
+        if entry['day'] == current_day_turkish:
+            # Only add entries that match the class name
+            if room_class:
+                # Check if the entry's class matches any of the possible formats
+                entry_class = entry['class'].strip()
+                match_found = False
+                
+                # Direct match
+                if entry_class == room_class:
+                    match_found = True
+                
+                # Check if entry_class contains room_class or vice versa
+                for format in possible_class_formats:
+                    if format in entry_class or entry_class in format:
+                        match_found = True
+                        break
+                
+                # Check if the numeric part and letter part match
+                entry_number_match = re.search(r'(\d+)', entry_class)
+                entry_letter_match = re.search(r'([A-Za-z])', entry_class)
+                room_number_match = re.search(r'(\d+)', room_class)
+                room_letter_match = re.search(r'([A-Za-z])', room_class)
+                
+                if (entry_number_match and entry_letter_match and room_number_match and room_letter_match and
+                    entry_number_match.group(1) == room_number_match.group(1) and
+                    entry_letter_match.group(1).upper() == room_letter_match.group(1).upper()):
+                    match_found = True
+                
+                if match_found:
+                    current_schedule.append(entry)
+    
+    # If no matching schedule found, return "Ders yok"
+    if not current_schedule:
+        return "Ders yok", ""
 
-    # Iterate through the rows to find the current class
-    for index, row in df.iterrows():
-        start_time = row['Başlangıç']  # This should now be a datetime.time object
-        end_time = row['Bitiş']  # This should also be a datetime.time object
-        class_name = row['Ders']  # Assuming 'Ders' is the class name column
-        teacher_name = row['Öğretmen']  # Get the teacher's name
+    # Iterate through the schedule data to find the current class
+    for entry in current_schedule:
+        time_range = entry['time_range']
+        
+        # Handle newline-separated time range
+        if '\n' in time_range:
+            try:
+                lines = time_range.split('\n')
+                start_time = lines[0].strip()
+                end_time = lines[1].strip()
+                
+                # Convert to datetime.time objects
+                start_datetime = datetime.strptime(start_time, '%H:%M').time()
+                end_datetime = datetime.strptime(end_time, '%H:%M').time()
+                
+                # If the end time is less than the start time, it means it goes past midnight
+                if end_datetime < start_datetime:
+                    end_datetime = (datetime.combine(datetime.today(), end_datetime) + timedelta(days=1)).time()
+                
+                # Check if the current time is within the start and end time
+                if start_datetime <= current_time <= end_datetime:
+                    return entry['subject'], entry['teacher']
+            except Exception:
+                continue
+        else:
+            # Try different separators for time range
+            separators = ['-', '\n', ' - ', ' to ', ':', 'to']
+            for separator in separators:
+                if separator in time_range:
+                    try:
+                        parts = time_range.split(separator, 1)
+                        start_time = parts[0].strip()
+                        end_time = parts[1].strip()
+                        
+                        # Try to parse the times
+                        try:
+                            # Try different time formats
+                            formats = ['%H:%M', '%H:%M:%S', '%I:%M %p', '%I:%M:%S %p']
+                            start_datetime = None
+                            end_datetime = None
+                            
+                            for fmt in formats:
+                                try:
+                                    start_datetime = datetime.strptime(start_time, fmt).time()
+                                    break
+                                except ValueError:
+                                    continue
+                            
+                            for fmt in formats:
+                                try:
+                                    end_datetime = datetime.strptime(end_time, fmt).time()
+                                    break
+                                except ValueError:
+                                    continue
+                            
+                            if start_datetime and end_datetime:
+                                # If the end time is less than the start time, it means it goes past midnight
+                                if end_datetime < start_datetime:
+                                    end_datetime = (datetime.combine(datetime.today(), end_datetime) + timedelta(days=1)).time()
+                                
+                                # Check if the current time is within the start and end time
+                                if start_datetime <= current_time <= end_datetime:
+                                    return entry['subject'], entry['teacher']  # Return the current class name and teacher's name
+                        except ValueError:
+                            continue
+                    except Exception:
+                        continue
+                    
+                    break
 
-        # Combine the current date with the start and end times
-        start_datetime = datetime.combine(datetime.now().date(), start_time)
-        end_datetime = datetime.combine(datetime.now().date(), end_time)
+    # If we're here, it means no class is currently in session
+    # Let's find the next class for today
+    next_class = None
+    next_start_time = None
+    
+    for entry in current_schedule:
+        time_range = entry['time_range']
+        
+        # Handle newline-separated time range for next class
+        if '\n' in time_range:
+            try:
+                start_time = time_range.split('\n')[0].strip()
+                start_datetime = datetime.strptime(start_time, '%H:%M').time()
+                
+                # If this class starts after the current time and is earlier than any previously found next class
+                if start_datetime > current_time and (next_start_time is None or start_datetime < next_start_time):
+                    next_class = entry
+                    next_start_time = start_datetime
+            except Exception:
+                continue
+        else:
+            # Try different separators for time range
+            for separator in ['-', ' - ', ' to ', ':', 'to']:
+                if separator in time_range:
+                    try:
+                        start_time = time_range.split(separator, 1)[0].strip()
+                        
+                        # Try different time formats
+                        for fmt in ['%H:%M', '%H:%M:%S', '%I:%M %p', '%I:%M:%S %p']:
+                            try:
+                                start_datetime = datetime.strptime(start_time, fmt).time()
+                                
+                                # If this class starts after the current time and is earlier than any previously found next class
+                                if start_datetime > current_time and (next_start_time is None or start_datetime < next_start_time):
+                                    next_class = entry
+                                    next_start_time = start_datetime
+                                
+                                break
+                            except ValueError:
+                                continue
+                    except Exception:
+                        continue
+                    
+                    break
+    
+    if next_class:
+        # If there's a next class today, show it with a "Sonraki Ders" prefix
+        return f"Sonraki Ders: {next_class['subject']}", next_class['teacher']
+    
+    return "Ders yok", ""  # No class currently or next, return "Ders yok" and empty teacher name
 
-        # If the end time is less than the start time, it means it goes past midnight
-        if end_time < start_time:
-            end_datetime += timedelta(days=1)  # Move the end time to the next day
-
-        # Check if the current time is within the start and end time
-        if start_datetime <= datetime.now() <= end_datetime:
-            return class_name, teacher_name  # Return the current class name and teacher's name
-
-    return "Ders yok", ""  # No class currently, return "Ders yok" and empty teacher name
+def extract_class_from_room_name(room_name):
+    """
+    Extract class name from room name.
+    Examples:
+    - "9/A Sınıfı" -> "9/A"
+    - "10-B Odası" -> "10/B"
+    - "9a Sınıfı" -> "9/A"
+    - "9A" -> "9/A"
+    - "9-a" -> "9/A"
+    - "Fizik Laboratuvarı" -> None (no class match)
+    """
+    import re
+    
+    # Try to match patterns like "9/A", "10-B", "11 C", "9a", "9A", "9-a", etc.
+    patterns = [
+        r'(\d+[\s/\-\.]*[A-Za-z])',  # Match patterns like "9/A", "10-B", "11.C", "12 D", "9a", "9A"
+        r'([A-Za-z][\s/\-\.]*\d+)',  # Match patterns like "A/9", "B-10"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, room_name)
+        if match:
+            # Clean up the matched class name
+            class_name = match.group(1)
+            
+            # Extract the number and letter parts
+            number_match = re.search(r'(\d+)', class_name)
+            letter_match = re.search(r'([A-Za-z])', class_name)
+            
+            if number_match and letter_match:
+                number = number_match.group(1)
+                letter = letter_match.group(1).upper()  # Convert letter to uppercase
+                
+                # Standardize the format to "number/letter"
+                return f"{number}/{letter}"
+    
+    # If no class pattern is found, return None
+    return None
 
 if __name__ == '__main__':
     init_db()
