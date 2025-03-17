@@ -46,9 +46,8 @@ def load_user(user_id):
 def before_first_request():
     try:
         db.session.execute(text('SELECT 1'))  # Use text() to declare the SQL expression
-        print("Database connection successful.")
     except Exception as e:
-        print(f"Database connection failed: {e}")
+        pass
 
 # Ana sayfa
 @app.route('/')
@@ -125,7 +124,7 @@ def manage_users():
     if not current_user.role == UserRole.ADMIN:
         flash('Bu sayfaya erişim yetkiniz yok', 'error')
         return redirect(url_for('index'))
-
+    
     users = db.session.query(User).all()
     for user in users:
         if user.last_seen:
@@ -386,7 +385,6 @@ def upload_file():
             })
     except Exception as e:
         db.session.rollback()
-        print(f'Upload Error: {e}')
         return jsonify({'error': str(e)}), 500
 
 # Dosya indirme
@@ -420,7 +418,6 @@ def reset_password():
             return redirect(url_for('manage_users'))
         return jsonify({'error': 'Kullanıcı bulunamadı!'}), 404
     except Exception as e:
-        print(f'Error: {e}')
         return jsonify({'error': 'Bir hata oluştu!'}), 500
 
 # Oda silme
@@ -446,7 +443,7 @@ def delete_room(room_id):
             return jsonify({'error': 'Oda bulunamadı'}), 404
     except Exception as e:
         db.session.rollback()
-        print(f"Error deleting room: {str(e)}")
+
         return jsonify({'error': f'Oda silinirken bir hata oluştu: {str(e)}'}), 500
 
 # Kullanıcı silme
@@ -488,7 +485,6 @@ def on_join(data):
 
             # Emit the updated list of users in the room
             users_in_room = [{'id': user.id, 'username': user.username} for user in room_obj.members]
-            print(f"Emitting user list to room {room}: {users_in_room}")
             emit('users', {'users': users_in_room}, room=room)  # Emit the users to the room
         else:
            pass
@@ -517,10 +513,10 @@ def upload_schedule():
         for room in Room.query.all():
             existing_file = ScheduleFile.query.filter_by(room_id=room.id).first()
             if existing_file:
-                # Update the existing entry in the database
+                    # Update the existing entry in the database
                 existing_file.filename = filename
             else:
-                # If no file exists, create a new entry
+                    # If no file exists, create a new entry
                 existing_file = ScheduleFile(room_id=room.id, filename=filename)
                 db.session.add(existing_file)
 
@@ -539,8 +535,8 @@ def allowed_file(filename):
 def on_connect():
     if current_user.is_authenticated:
         user_status[current_user.id] = True  # Mark user as online
-        emit('user_status_change', {
-            'user_id': current_user.id,
+    emit('user_status_change', {
+        'user_id': current_user.id,
             'is_active': True
         }, broadcast=True)  # Notify all clients
 
@@ -938,13 +934,41 @@ def room_users(room_id):
     user_statuses = []
     for user in non_admin_users:
         user_statuses.append({
-            'id': user.id,
-            'username': user.username,
+                'id': user.id,
+                'username': user.username,
             'full_name': user.full_name,
             'is_online': user_status.get(user.id, False)  # Check online status
         })
 
     return render_template('room_users.html', users=user_statuses, room=room)  # Pass only non-admin users
+
+@app.route('/add_user', methods=['POST'])
+def add_user():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    full_name = request.form.get('full_name')
+    role = request.form.get('role')
+
+    # Validate input
+    if not username or not password or not full_name or not role:
+        return jsonify({'error': 'Tüm alanlar gereklidir.'}), 400
+
+    # Check if the username already exists
+    existing_user = User.query.filter_by(username=username).first()
+    if existing_user:
+        return jsonify({'error': 'Bu kullanıcı adı zaten mevcut.'}), 400
+
+    # Create a new user
+    new_user = User(username=username, password_hash=password, full_name=full_name, role=role)
+    
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+        flash('Kullanıcı başarıyla eklendi.', 'success')
+        return jsonify({'success': True}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Kullanıcı eklenirken bir hata oluştu: ' + str(e)}), 500
 
 if __name__ == '__main__':
     init_db()

@@ -35,7 +35,7 @@
         <div class="bg-white rounded-lg shadow-sm overflow-hidden">
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 mb-4">Yeni Kullanıcı Ekle</h2>
-                <form method="POST" class="space-y-4">
+                <form id="addUserForm" method="POST" class="space-y-4">
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                             <label for="username" class="block text-sm font-medium text-gray-700">Kullanıcı Adı</label>
@@ -159,8 +159,6 @@
                                     <button onclick="deleteUser({{ user.id }})"
                                         class="text-red-600 hover:text-red-900 pl-8">Sil</button>
                                 </td>
-
-
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -197,6 +195,32 @@
         </div>
     </div>
     <script>
+        // Add User Functionality
+        document.getElementById('addUserForm').addEventListener('submit', async function (e) {
+            e.preventDefault(); // Prevent default form submission
+
+            const formData = new FormData(this); // Get form data
+
+            try {
+                const response = await fetch('/add_user', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert('Kullanıcı başarıyla eklendi.');
+                    location.reload(); // Reload the page to see the new user
+                } else {
+                    alert(result.error || 'Bir hata oluştu');
+                }
+            } catch (error) {
+                alert('Bir hata oluştu: ' + error);
+            }
+        });
+
+        // Existing functions
         function toggleEdit(btn) {
             const row = btn.closest('tr');
             row.querySelectorAll('.user-data').forEach(span => span.classList.add('hidden'));
@@ -276,101 +300,6 @@
     </script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Existing functions
-        function toggleEdit(btn) {
-            const row = btn.closest('tr');
-            row.querySelectorAll('.user-data').forEach(span => span.classList.add('hidden'));
-            row.querySelectorAll('.edit-input').forEach(input => input.classList.remove('hidden'));
-            row.querySelector('.edit-btn').classList.add('hidden');
-            row.querySelector('.save-btn').classList.remove('hidden');
-            row.querySelector('.cancel-btn').classList.remove('hidden');
-        }
-
-        function cancelEdit(btn) {
-            const row = btn.closest('tr');
-            row.querySelectorAll('.user-data').forEach(span => span.classList.remove('hidden'));
-            row.querySelectorAll('.edit-input').forEach(input => input.classList.add('hidden'));
-            row.querySelector('.edit-btn').classList.remove('hidden');
-            row.querySelector('.save-btn').classList.add('hidden');
-            row.querySelector('.cancel-btn').classList.add('hidden');
-        }
-
-        async function saveChanges(btn) {
-            const row = btn.closest('tr');
-            const userId = row.dataset.userId;
-            const data = {};
-
-            row.querySelectorAll('.edit-input').forEach(input => {
-                const field = row.querySelector(`.user-data[data-field="${input.previousElementSibling.dataset.field}"]`);
-                data[field.dataset.field] = input.value;
-            });
-
-            try {
-                const response = await fetch(`/users/${userId}/edit`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    // Update displayed values
-                    row.querySelectorAll('.edit-input').forEach(input => {
-                        const field = row.querySelector(`.user-data[data-field="${input.previousElementSibling.dataset.field}"]`);
-                        field.textContent = input.value;
-                    });
-
-                    // Hide edit mode
-                    cancelEdit(btn);
-                } else {
-                    alert(result.error || 'Bir hata oluştu');
-                }
-            } catch (error) {
-                alert('Bir hata oluştu: ' + error);
-            }
-        }
-
-        function deleteUser(userId) {
-            if (confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?')) {
-                fetch(`/delete_user/${userId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    }
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            alert('Kullanıcı başarıyla silindi.');
-                            location.reload();
-                        } else {
-                            alert('Hata: ' + data.error);
-                        }
-                    });
-            }
-        }
-
-        // Format datetime without timezone adjustment
-        function formatDateTime(timestamp) {
-            if (!timestamp) return '';
-
-            const date = new Date(timestamp);
-            // Add 3 hours to adjust for timezone
-            date.setHours(date.getHours() + 3);
-
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-
-            return `${day}.${month}.${year} ${hours}:${minutes}`;
-        }
-
         // Socket.IO connection for real-time updates
         document.addEventListener('DOMContentLoaded', function () {
             const socket = io();
@@ -385,14 +314,6 @@
                     } else {
                         statusIndicator.classList.remove('bg-green-500');
                         statusIndicator.classList.add('bg-gray-500');
-                    }
-                }
-
-                // Update last seen time if provided
-                if (data.last_seen) {
-                    const lastSeenElement = document.getElementById(`last-seen-${data.user_id}`);
-                    if (lastSeenElement) {
-                        lastSeenElement.textContent = formatDateTime(data.last_seen);
                     }
                 }
             });
