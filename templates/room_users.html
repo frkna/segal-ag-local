@@ -36,7 +36,7 @@
                                     Ad Soyad</th>
                                 <th
                                     class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Durum</th>
+                                    Aktif</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
@@ -48,7 +48,7 @@
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="text-sm text-gray-500">{{ user.full_name }}</span>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <td class="px-9 py-4 whitespace-nowrap text-left">
                                     <span id="status-indicator-{{ user.id }}"
                                         class="inline-block w-2.5 h-2.5 {% if user.is_online %}bg-green-500{% else %}bg-gray-500{% endif %} rounded-full"></span>
                                 </td>

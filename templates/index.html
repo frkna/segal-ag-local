@@ -41,11 +41,140 @@
             display: flex;
             align-items: center;
         }
+
+        .slide-down {
+            display: none;
+            /* Initially hidden */
+            opacity: 0;
+            /* Start with opacity 0 */
+            transition: opacity 0.5s ease, max-height 0.5s ease;
+            /* Transition for opacity and max-height */
+            max-height: 0;
+            /* Start with max-height 0 */
+        }
+
+        .slide-down.show {
+            display: block;
+            /* Show the element */
+            opacity: 1;
+            /* Fade in */
+            max-height: 500px;
+            /* Set a max-height to allow sliding */
+        }
     </style>
 </head>
 
 <body class="bg-gray-50">
     <audio id="notification-sound" src="/static/sound/notification.mp3" preload="auto"></audio>
+
+    <div class="h-screen flex">
+        <div class="w-64 bg-white border-r border-gray-200 sidebar-container">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h1 class="text-xl font-semibold text-gray-800">Şegal Ağ</h1>
+                <div class="flex space-x-2">
+                    {% if current_user.can_manage_rooms() %}
+                    <a href="{{ url_for('manage_rooms') }}" class="text-blue-600 hover:text-blue-800">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </a>
+                    {% endif %}
+                    {% if current_user.can_manage_users() %}
+                    <a href="{{ url_for('manage_users') }}" class="text-blue-600 hover:text-blue-800">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Odalar Listesi -->
+            <div class="rooms-list p-4 space-y-2 flex-1" id="roomsList">
+                {% for room in rooms %}
+                <div class="flex justify-between items-center">
+                    <button data-room-id="{{ room.id }}" onclick="switchRoom('{{ room.id }}')"
+                        class="room-item flex-grow text-left px-4 py-2 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200"
+                        id="room-{{ room.id }}">
+                        {{ room.name }}
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Profil ve Çıkış -->
+            <div class="p-4 border-t border-gray-200 bg-gray-50">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="text-sm font-medium text-gray-900">{{ current_user.username }}</div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <a href="{{ url_for('logout', user_id=current_user.id) }}"
+                            class="text-sm text-red-600 hover:text-red-800">Çıkış</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sağ Taraf - Mesajlaşma Alanı -->
+        <div class="flex-1 flex flex-col">
+            <div class="p-4 border-b border-gray-200 bg-gray-50">
+                {% if current_user.role == 'idare' %}
+                <a href="{{ url_for('room_users', room_id=current_room.id) }}"
+                    class="text-lg font-semibold text-gray-800 hover:underline" id="currentRoomName">
+                    {{ current_room.name }}
+                </a>
+                {% else %}
+                <span class="text-lg font-semibold text-gray-800" id="currentRoomName">
+                    {{ current_room.name }}
+                </span>
+                {% endif %}
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-4" id="messages" style="overflow-y: auto; flex: 1;">
+                <!-- Mesajlar buraya gelecek -->
+            </div>
+
+            {% if current_user.role not in ['sınıf'] %}
+            <!-- Mesaj ve Dosya Gönderme Formu -->
+            <div class="p-4 border-t border-gray-200 bg-white">
+                <form id="messageForm" class="space-y-3">
+                    <div class="flex space-x-4">
+                        <input type="text" id="message"
+                            class="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Mesajınızı yazın...">
+                        <button type="submit"
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                            Gönder
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <input type="file" id="file" class="hidden" onchange="handleFileSelect(this)">
+                        <label for="file"
+                            class="cursor-pointer flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path fill-rule="evenodd"
+                                    d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            <span>Dosya Ekle (Max: 16MB)</span>
+                        </label>
+                        <span id="selectedFileName" class="text-sm text-gray-500"></span>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="usersList" class="users-list">
+        <!-- User list will be populated here -->
+    </div>
+
     <script>
         const socket = io({
             transports: ['websocket'],
@@ -53,15 +182,15 @@
         });
 
         let currentUserId = {{ current_user.id }};
+        let currentRoom = null;
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('message');
+        const messagesDiv = document.getElementById('messages');
+        const currentRoomName = document.getElementById('currentRoomName');
         let lastHeartbeat = Date.now();
         let heartbeatInterval;
         const HEARTBEAT_INTERVAL = 10000; // 10 seconds (more frequent for testing)
         const OFFLINE_TIMEOUT = 30000; // 30 seconds
-
-        // Debug logging for all socket events
-        socket.onAny((event, ...args) => {
-            console.log(`Socket event received: ${event}`, args);
-        });
 
         socket.on('play_sound', function (data) {
             var audio = document.getElementById('notification-sound');
@@ -70,11 +199,9 @@
 
         // Function to update user status in the UI
         function updateUserStatus(userId, isOnline) {
-            console.log(`Updating status for user ${userId} to ${isOnline ? 'online' : 'offline'}`);
 
             // Find all status indicators for this user
             const userStatusElements = document.querySelectorAll(`.user-status[data-user-id="${userId}"]`);
-            console.log(`Found ${userStatusElements.length} status elements for user ${userId}`);
 
             userStatusElements.forEach(element => {
                 // Update the status indicator
@@ -91,30 +218,28 @@
         }
 
         // When the page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log("DOM loaded, setting up socket events");
+        document.addEventListener('DOMContentLoaded', function () {
 
             // Start socket connection
             socket.on('connect', () => {
-                console.log('Socket connected');
                 socket.emit('user_online'); // Mark user as online
+
+                // Scroll down to the messages section when connected
+                messagesDiv.scrollTop = messagesDiv.scrollHeight; // Scroll to the bottom
             });
 
             // Listen for user status updates
             socket.on('user_status_update', (data) => {
-                console.log('Status update received:', data);
                 updateUserStatus(data.user_id, data.status);
             });
 
             // Listen for users in the room
             socket.on('users', (data) => {
-                console.log('Users data received:', data);
                 const usersList = document.getElementById('usersList'); // Ensure this ID matches your HTML
                 usersList.innerHTML = ''; // Clear existing users
 
                 if (data && data.users) {
                     data.users.forEach(user => {
-                        console.log(`Adding user to list: ${user.username}`); // Debug line
                         const userDiv = document.createElement('div');
                         userDiv.textContent = user.username; // Display username
                         usersList.appendChild(userDiv);
@@ -123,8 +248,16 @@
                     console.error('No users found in data:', data); // Debug line for missing users
                 }
 
-                console.log('Users list element:', usersList); // Check if the element is found
             });
+
+            // Automatically switch to the first room and scroll down
+            const firstRoom = document.querySelector('.room-item');
+            if (firstRoom) {
+                const roomId = firstRoom.getAttribute('data-room-id');
+                switchRoom(roomId);
+                // Scroll down to the messages section after loading the first room
+                scrollToBottom(); // Scroll to the bottom
+            }
         });
 
         // Request permission for notifications
@@ -259,124 +392,6 @@
                 }
             }
         });
-    </script>
-
-
-    <div class="h-screen flex">
-        <div class="w-64 bg-white border-r border-gray-200 sidebar-container">
-            <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h1 class="text-xl font-semibold text-gray-800">Şegal Ağ</h1>
-                <div class="flex space-x-2">
-                    {% if current_user.can_manage_rooms() %}
-                    <a href="{{ url_for('manage_rooms') }}" class="text-blue-600 hover:text-blue-800">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                    </a>
-                    {% endif %}
-                    {% if current_user.can_manage_users() %}
-                    <a href="{{ url_for('manage_users') }}" class="text-blue-600 hover:text-blue-800">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Odalar Listesi -->
-            <div class="rooms-list p-4 space-y-2 flex-1" id="roomsList">
-                {% for room in rooms %}
-                <div class="flex justify-between items-center">
-                    <button data-room-id="{{ room.id }}" onclick="switchRoom('{{ room.id }}')"
-                        class="room-item flex-grow text-left px-4 py-2 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200"
-                        id="room-{{ room.id }}">
-                        {{ room.name }}
-                    </button>
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- Profil ve Çıkış -->
-            <div class="p-4 border-t border-gray-200 bg-gray-50">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
-                        <div class="text-sm font-medium text-gray-900">{{ current_user.username }}</div>
-                    </div>
-                    <div class="flex space-x-2">
-                        <a href="{{ url_for('logout', user_id=current_user.id) }}"
-                            class="text-sm text-red-600 hover:text-red-800">Çıkış</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sağ Taraf - Mesajlaşma Alanı -->
-        <div class="flex-1 flex flex-col">
-            <div class="p-4 border-b border-gray-200 bg-gray-50">
-                {% if current_user.role == 'idare' %}
-                <a href="{{ url_for('room_users', room_id=current_room.id) }}"
-                    class="text-lg font-semibold text-gray-800 hover:underline" id="currentRoomName">
-                    {{ current_room.name }}
-                </a>
-                {% else %}
-                <span class="text-lg font-semibold text-gray-800" id="currentRoomName">
-                    {{ current_room.name }}
-                </span>
-                {% endif %}
-            </div>
-            <div class="flex-1 overflow-y-auto p-4 space-y-4" id="messages">
-                <!-- Mesajlar buraya gelecek -->
-            </div>
-
-            {% if current_user.role not in ['sınıf'] %}
-            <!-- Mesaj ve Dosya Gönderme Formu -->
-            <div class="p-4 border-t border-gray-200 bg-white">
-                <form id="messageForm" class="space-y-3">
-                    <div class="flex space-x-4">
-                        <input type="text" id="message"
-                            class="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Mesajınızı yazın...">
-                        <button type="submit"
-                            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
-                            Gönder
-                        </button>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <input type="file" id="file" class="hidden" onchange="handleFileSelect(this)">
-                        <label for="file"
-                            class="cursor-pointer flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
-                                fill="currentColor">
-                                <path fill-rule="evenodd"
-                                    d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                            <span>Dosya Ekle (Max: 16MB)</span>
-                        </label>
-                        <span id="selectedFileName" class="text-sm text-gray-500"></span>
-                    </div>
-                </form>
-            </div>
-            {% endif %}
-        </div>
-
-    </div>
-
-    <div id="usersList" class="users-list">
-        <!-- User list will be populated here -->
-    </div>
-
-    <script>
-        let currentRoom = null;
-        const messageForm = document.getElementById('messageForm');
-        const messageInput = document.getElementById('message');
-        const messagesDiv = document.getElementById('messages');
-        const currentRoomName = document.getElementById('currentRoomName');
 
         // Oda değiştirme fonksiyonu
         function switchRoom(roomId) {
@@ -395,16 +410,10 @@
 
             // Mesajları yükle
             loadRoomMessages(roomId);
-        }
 
-        // Sayfa yüklendiğinde ilk odaya gir
-        document.addEventListener('DOMContentLoaded', function () {
-            const firstRoom = document.querySelector('.room-item');
-            if (firstRoom) {
-                const roomId = firstRoom.getAttribute('data-room-id');
-                switchRoom(roomId);
-            }
-        });
+
+            scrollToBottom();
+        }
 
         // Oda mesajlarını yükle
         async function loadRoomMessages(roomId) {
@@ -457,7 +466,7 @@
                     });
 
                     // Mesajlar yüklendikten sonra en alta kaydır
-                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    scrollToBottom(); // Ensure it scrolls to the bottom
                 }
             } catch (error) {
                 console.error('Mesajlar yüklenirken hata:', error);
@@ -490,7 +499,7 @@
             `;
 
             messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            //scrollToBottom();
         }
 
         // En alta kaydırma fonksiyonu
@@ -528,7 +537,6 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('room_id', currentRoom);
-                console.log(formData);
 
                 fetch('/upload', {
                     method: 'POST',
@@ -588,7 +596,5 @@
         });
     </script>
 </body>
-
-</html>
 
 </html>
