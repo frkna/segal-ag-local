@@ -32,11 +32,6 @@
             flex-direction: column;
         }
 
-        .rooms-list {
-            flex: 1;
-            overflow-y: auto;
-        }
-
         .message {
             background-color: white;
             padding: 10px;
@@ -95,61 +90,40 @@
             });
         }
 
-        // Call this when the page loads
+        // When the page loads
         document.addEventListener('DOMContentLoaded', () => {
             console.log("DOM loaded, setting up socket events");
 
-            // Start heartbeat when socket connects
+            // Start socket connection
             socket.on('connect', () => {
                 console.log('Socket connected');
-
-                // Mark user as online
-                socket.emit('user_online');
-
-                // Request current status of all users
-                socket.emit('request_all_statuses');
-            });
-
-            // Handle disconnection
-            socket.on('disconnect', () => {
-                console.log('Socket disconnected');
-                if (heartbeatInterval) {
-                    clearInterval(heartbeatInterval);
-                }
+                socket.emit('user_online'); // Mark user as online
             });
 
             // Listen for user status updates
             socket.on('user_status_update', (data) => {
                 console.log('Status update received:', data);
-                if (data && typeof data.user_id !== 'undefined' && typeof data.status !== 'undefined') {
-                    updateUserStatus(data.user_id, data.status);
-                } else {
-                    console.error('Invalid status update data:', data);
-                }
+                updateUserStatus(data.user_id, data.status);
             });
 
-            // Listen for bulk status updates
-            socket.on('all_user_statuses', (data) => {
-                console.log('All statuses received:', data);
-                if (data && Array.isArray(data.statuses)) {
-                    data.statuses.forEach(user => {
-                        if (typeof user.user_id !== 'undefined' && typeof user.status !== 'undefined') {
-                            updateUserStatus(user.user_id, user.status);
-                        }
-                    });
-                } else {
-                    console.error('Invalid bulk status data:', data);
-                }
-            });
-
-            // When we receive the initial users list for a room, update their status
+            // Listen for users in the room
             socket.on('users', (data) => {
                 console.log('Users data received:', data);
-                // We don't need to update the user list in the UI anymore
-                // Just request current statuses for the status page
-                setTimeout(() => {
-                    socket.emit('request_all_statuses');
-                }, 500);
+                const usersList = document.getElementById('usersList'); // Ensure this ID matches your HTML
+                usersList.innerHTML = ''; // Clear existing users
+
+                if (data && data.users) {
+                    data.users.forEach(user => {
+                        console.log(`Adding user to list: ${user.username}`); // Debug line
+                        const userDiv = document.createElement('div');
+                        userDiv.textContent = user.username; // Display username
+                        usersList.appendChild(userDiv);
+                    });
+                } else {
+                    console.error('No users found in data:', data); // Debug line for missing users
+                }
+
+                console.log('Users list element:', usersList); // Check if the element is found
             });
         });
 
@@ -289,7 +263,6 @@
 
 
     <div class="h-screen flex">
-        <!-- Sol Sidebar - Odalar -->
         <div class="w-64 bg-white border-r border-gray-200 sidebar-container">
             <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <h1 class="text-xl font-semibold text-gray-800">Şegal Ağ</h1>
@@ -345,9 +318,17 @@
         <!-- Sağ Taraf - Mesajlaşma Alanı -->
         <div class="flex-1 flex flex-col">
             <div class="p-4 border-b border-gray-200 bg-gray-50">
-                <h2 class="text-lg font-semibold text-gray-800" id="currentRoomName">Bir oda seçin</h2>
+                {% if current_user.role == 'idare' %}
+                <a href="{{ url_for('room_users', room_id=current_room.id) }}"
+                    class="text-lg font-semibold text-gray-800 hover:underline" id="currentRoomName">
+                    {{ current_room.name }}
+                </a>
+                {% else %}
+                <span class="text-lg font-semibold text-gray-800" id="currentRoomName">
+                    {{ current_room.name }}
+                </span>
+                {% endif %}
             </div>
-
             <div class="flex-1 overflow-y-auto p-4 space-y-4" id="messages">
                 <!-- Mesajlar buraya gelecek -->
             </div>
@@ -384,6 +365,10 @@
             {% endif %}
         </div>
 
+    </div>
+
+    <div id="usersList" class="users-list">
+        <!-- User list will be populated here -->
     </div>
 
     <script>
@@ -603,5 +588,7 @@
         });
     </script>
 </body>
+
+</html>
 
 </html>

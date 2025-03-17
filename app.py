@@ -11,6 +11,7 @@ from flask_wtf.csrf import generate_csrf
 import pandas as pd
 from schedule_convert import parse_schedule
 import re
+from sqlalchemy import text  # Import the text function
 
 # Flask uygulamasını oluştur
 app = Flask(__name__)
@@ -34,9 +35,20 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# Dictionary to track user statuses
+user_status = {}
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, user_id)
+
+@app.before_request
+def before_first_request():
+    try:
+        db.session.execute(text('SELECT 1'))  # Use text() to declare the SQL expression
+        print("Database connection successful.")
+    except Exception as e:
+        print(f"Database connection failed: {e}")
 
 # Ana sayfa
 @app.route('/')
@@ -45,7 +57,8 @@ def index():
     rooms = db.session.query(Room).filter(
         Room.members.any(id=current_user.id)
     ).all()
-    return render_template('index.html', rooms=rooms, current_user=current_user)
+    current_room = rooms[0]
+    return render_template('index.html', rooms=rooms, current_user=current_user, current_room=current_room)
 
 # Giriş sayfası
 @app.route('/login', methods=['GET', 'POST'])
@@ -458,20 +471,29 @@ def on_join(data):
     room = data['room']
     join_room(room)
     
-    # Kullanıcının odaya ilk kez katılıp katılmadığını kontrol et
     room_obj = db.session.get(Room, room)
-    if room_obj and current_user not in room_obj.members:
-        # Odaya ekle
-        room_obj.members.append(current_user)
-        db.session.commit()
+    if room_obj:
         
-        # Sistem mesajı gönder
-        emit('message', {
-            'user': 'Sistem',
-            'content': f'{current_user.username} odaya katıldı',
-            'timestamp': datetime.now().strftime('%H:%M')
-        }, room=room)
-        emit('play_sound', {'message': 'Kullanıcı katıldı!'}, broadcast=True)
+        if current_user not in room_obj.members:
+            room_obj.members.append(current_user)
+            db.session.commit()
+            
+            # Emit a message to the room
+            emit('message', {
+                'user': 'Sistem',
+                'content': f'{current_user.username} odaya katıldı',
+                'timestamp': datetime.now().strftime('%H:%M')
+            }, room=room)
+            emit('play_sound', {'message': 'Kullanıcı katıldı!'}, broadcast=True)
+
+            # Emit the updated list of users in the room
+            users_in_room = [{'id': user.id, 'username': user.username} for user in room_obj.members]
+            print(f"Emitting user list to room {room}: {users_in_room}")
+            emit('users', {'users': users_in_room}, room=room)  # Emit the users to the room
+        else:
+           pass
+    else:
+        pass
 
 @app.route('/upload_schedule', methods=['POST'])
 @login_required
@@ -516,22 +538,20 @@ def allowed_file(filename):
 @socketio.on('connect')
 def on_connect():
     if current_user.is_authenticated:
-        current_user.update_last_seen()
-        emit('message', {
-            'user': 'Sistem',
-            'content': f'{current_user.username} bağlandı',
-            'timestamp': datetime.now().strftime('%H:%M')
-        })
-    return jsonify({'success': True})
+        user_status[current_user.id] = True  # Mark user as online
+        emit('user_status_change', {
+            'user_id': current_user.id,
+            'is_active': True
+        }, broadcast=True)  # Notify all clients
 
 @socketio.on('disconnect')
 def on_disconnect():
-    current_user.update_last_seen()
-    emit('message', {
-        'user': 'Sistem',
-        'content': f'{current_user.username} çıkış yaptı',
-        'timestamp': datetime.now().strftime('%H:%M')
-    })
+    if current_user.is_authenticated:
+        user_status[current_user.id] = False  # Mark user as offline
+        emit('user_status_change', {
+            'user_id': current_user.id,
+            'is_active': False
+        }, broadcast=True)  # Notify all clients
 
 @socketio.on('message')
 def on_message(data):
@@ -566,6 +586,24 @@ def on_message(data):
     # Send notification only to other users in the room
     if current_user.is_authenticated:
         emit('play_sound', {'message': 'Yeni mesaj alındı!'}, room=room_id, skip_sid=request.sid)  # Skip the sender
+
+@socketio.on('user_online')
+def handle_user_online():
+    if current_user.is_authenticated:
+        user_status[current_user.id] = True  # Mark user as online
+        emit('user_status_change', {
+            'user_id': current_user.id,
+            'is_active': True
+        }, broadcast=True)  # Notify all clients
+
+@socketio.on('user_offline')
+def handle_user_offline():
+    if current_user.is_authenticated:
+        user_status[current_user.id] = False  # Mark user as offline
+        emit('user_status_change', {
+            'user_id': current_user.id,
+            'is_active': False
+        }, broadcast=True)  # Notify all clients
 
 # Veritabanını oluştur
 def init_db():
@@ -885,6 +923,28 @@ def extract_class_from_room_name(room_name):
     
     # If no class pattern is found, return None
     return None
+
+@app.route('/rooms/<int:room_id>/users', methods=['GET'])
+@login_required
+def room_users(room_id):
+    room = db.session.get(Room, room_id)
+    if not room:
+        return jsonify({'error': 'Room not found'}), 404
+
+    # Filter out non-admin users
+    non_admin_users = [user for user in room.members if user.role != UserRole.ADMIN]
+
+    # Prepare the user status data
+    user_statuses = []
+    for user in non_admin_users:
+        user_statuses.append({
+            'id': user.id,
+            'username': user.username,
+            'full_name': user.full_name,
+            'is_online': user_status.get(user.id, False)  # Check online status
+        })
+
+    return render_template('room_users.html', users=user_statuses, room=room)  # Pass only non-admin users
 
 if __name__ == '__main__':
     init_db()
