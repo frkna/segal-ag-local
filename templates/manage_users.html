@@ -10,7 +10,6 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-
         }
     </style>
 </head>
@@ -48,19 +47,11 @@
                             <input type="password" name="password" id="password" required
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
-
                         <div>
                             <label for="full_name" class="block text-sm font-medium text-gray-700">Ad Soyadı</label>
                             <input type="text" name="full_name" id="full_name" required
                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
-                        <div>
-                            <label for="email" class="block text-sm font-medium text-gray-700">E-posta</label>
-                            <input type="email" name="email" id="email" required
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label for="role" class="block text-sm font-medium text-gray-700">Rol</label>
                             <select id="role" name="role" required
@@ -72,143 +63,141 @@
                             </select>
                         </div>
                     </div>
-            </div>
-
-            <div class="flex justify-end pr-4 pb-4 mt-4">
-                <button onclick="addMember()"
-                    class="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Ekle</button>
-            </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="mt-8 bg-white rounded-lg shadow-sm overflow-hidden">
-        <div class="p-6">
-            <h2 class="text-lg font-medium text-gray-900 mb-4">Mevcut Kullanıcılar</h2>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead>
-                        <tr>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Kullanıcı Adı
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Ad Soyad
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                E-posta
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Rol
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Aktif
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Son Görülme
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                İşlemler
-                            </th>
-                            <th
-                                class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Sil
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for user in users %}
-                        <tr data-user-id="{{ user.id }}">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="text-sm font-medium text-gray-900 user-data" data-field="username">{{
-                                    user.username }}</span>
-                                <input type="text"
-                                    class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input"
-                                    value="{{ user.username }}">
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="text-sm text-gray-500 user-data" data-field="full_name">{{ user.full_name
-                                    }}</span>
-                                <input type="text"
-                                    class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input"
-                                    value="{{ user.full_name }}" required>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="text-sm text-gray-500 user-data" data-field="email">{{ user.email }}</span>
-                                <input type="email"
-                                    class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input"
-                                    value="{{ user.email }}" required>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="text-sm text-gray-500 user-data" data-field="role">{{ user.role }}</span>
-                                <select
-                                    class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input">
-                                    <option value="idare" {% if user.role=='idare' %}selected{% endif %}>İdare</option>
-                                    <option value="öğretmen" {% if user.role=='öğretmen' %}selected{% endif %}>Öğretmen
-                                    </option>
-                                    <option value="sınıf" {% if user.role=='sınıf' %}selected{% endif %}>Sınıf
-                                    </option>
-                                </select>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                {% if user.is_active %}
-                                <span class="inline-block w-2.5 h-2.5 bg-green-500 rounded-full"></span>
-                                {% else %}
-                                <span class="inline-block w-2.5 h-2.5 bg-gray-500 rounded-full"></span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ user.last_seen.strftime('%d.%m.%Y %H:%M') if user.last_seen }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                <button onclick="toggleEdit(this)"
-                                    class="text-blue-600 hover:text-blue-900 edit-btn">Düzenle</button>
-                                <button onclick="saveChanges(this)"
-                                    class="hidden text-green-600 hover:text-green-900 save-btn">Kaydet</button>
-                                <button onclick="cancelEdit(this)"
-                                    class="hidden text-red-600 hover:text-red-900 cancel-btn">İptal</button>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <button onclick="deleteUser({{ user.id }})"
-                                    class="text-red-600 hover:text-red-900">Sil</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                    <div class="flex justify-end">
+                        <button type="submit"
+                            class="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Ekle</button>
+                    </div>
+                </form>
             </div>
         </div>
-    </div>
 
-    <div class="mt-8 bg-white rounded-lg shadow-sm overflow-hidden">
-        <div class="p-6">
-            <h2 class="text-lg font-medium text-gray-900 mb-4">Şifre Sıfırlama</h2>
-            <form action="/reset_password" method="POST" class="space-y-4">
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                        <label for="username2" class="block text-sm font-medium text-gray-700">Kullanıcı Adı:</label>
-                        <input type="text" id="username2" name="username2" required
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="new_password" class="block text-sm font-medium text-gray-700">Yeni Şifre:</label>
-                        <input type="password" id="new_password" name="new_password" required
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
+        <div class="mt-8 bg-white rounded-lg shadow-sm overflow-hidden">
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">Mevcut Kullanıcılar</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Kullanıcı Adı
+                                </th>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Ad Soyad
+                                </th>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Rol
+                                </th>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Aktif
+                                </th>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Son Görülme
+                                </th>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    İşlemler
+                                </th>
+                                <th
+                                    class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Sil
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for user in users %}
+                            <tr data-user-id="{{ user.id }}">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="text-sm font-medium text-gray-900 user-data" data-field="username">{{
+                                        user.username }}</span>
+                                    <input type="text"
+                                        class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input"
+                                        value="{{ user.username }}">
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="text-sm text-gray-500 user-data" data-field="full_name">{{
+                                        user.full_name
+                                        }}</span>
+                                    <input type="text"
+                                        class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input"
+                                        value="{{ user.full_name }}" required>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="text-sm text-gray-500 user-data" data-field="role">{{ user.role
+                                        }}</span>
+                                    <select
+                                        class="hidden mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 edit-input">
+                                        <option value="idare" {% if user.role=='idare' %}selected{% endif %}>İdare
+                                        </option>
+                                        <option value="öğretmen" {% if user.role=='öğretmen' %}selected{% endif %}>
+                                            Öğretmen
+                                        </option>
+                                        <option value="sınıf" {% if user.role=='sınıf' %}selected{% endif %}>Sınıf
+                                        </option>
+                                    </select>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-center">
+                                    <span id="status-indicator-{{ user.id }}"
+                                        class="inline-block w-2.5 h-2.5 {% if user.is_active %}bg-green-500{% else %}bg-gray-500{% endif %} rounded-full"></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <span id="last-seen-{{ user.id }}">
+                                        {% if user.last_seen_adjusted %}
+                                        {{ user.last_seen_adjusted.strftime('%d.%m.%Y %H:%M') }}
+                                        {% else %}
+                                        Hiç
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                    <button onclick="toggleEdit(this)"
+                                        class="text-blue-600 hover:text-blue-900 edit-btn">Düzenle</button>
+                                    <button onclick="saveChanges(this)"
+                                        class="hidden text-green-600 hover:text-green-900 save-btn">Kaydet</button>
+                                    <button onclick="cancelEdit(this)"
+                                        class="hidden text-red-600 hover:text-red-900 cancel-btn">İptal</button>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <button onclick="deleteUser({{ user.id }})"
+                                        class="text-red-600 hover:text-red-900">Sil</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-                <div class="flex justify-end">
-                    <button type="submit"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Şifreyi
-                        Sıfırla</button>
-                </div>
-            </form>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-white rounded-lg shadow-sm overflow-hidden">
+            <div class="p-6">
+                <h2 class="text-lg font-medium text-gray-900 mb-4">Şifre Sıfırlama</h2>
+                <form action="/reset_password" method="POST" class="space-y-4">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="username2" class="block text-sm font-medium text-gray-700">Kullanıcı
+                                Adı:</label>
+                            <input type="text" id="username2" name="username2" required
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="new_password" class="block text-sm font-medium text-gray-700">Yeni
+                                Şifre:</label>
+                            <input type="password" id="new_password" name="new_password" required
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Şifreyi
+                            Sıfırla</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     <script>
@@ -288,6 +277,133 @@
                     });
             }
         }
+    </script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // Existing functions
+        function toggleEdit(btn) {
+            const row = btn.closest('tr');
+            row.querySelectorAll('.user-data').forEach(span => span.classList.add('hidden'));
+            row.querySelectorAll('.edit-input').forEach(input => input.classList.remove('hidden'));
+            row.querySelector('.edit-btn').classList.add('hidden');
+            row.querySelector('.save-btn').classList.remove('hidden');
+            row.querySelector('.cancel-btn').classList.remove('hidden');
+        }
+
+        function cancelEdit(btn) {
+            const row = btn.closest('tr');
+            row.querySelectorAll('.user-data').forEach(span => span.classList.remove('hidden'));
+            row.querySelectorAll('.edit-input').forEach(input => input.classList.add('hidden'));
+            row.querySelector('.edit-btn').classList.remove('hidden');
+            row.querySelector('.save-btn').classList.add('hidden');
+            row.querySelector('.cancel-btn').classList.add('hidden');
+        }
+
+        async function saveChanges(btn) {
+            const row = btn.closest('tr');
+            const userId = row.dataset.userId;
+            const data = {};
+
+            row.querySelectorAll('.edit-input').forEach(input => {
+                const field = row.querySelector(`.user-data[data-field="${input.previousElementSibling.dataset.field}"]`);
+                data[field.dataset.field] = input.value;
+            });
+
+            try {
+                const response = await fetch(`/users/${userId}/edit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // Update displayed values
+                    row.querySelectorAll('.edit-input').forEach(input => {
+                        const field = row.querySelector(`.user-data[data-field="${input.previousElementSibling.dataset.field}"]`);
+                        field.textContent = input.value;
+                    });
+
+                    // Hide edit mode
+                    cancelEdit(btn);
+                } else {
+                    alert(result.error || 'Bir hata oluştu');
+                }
+            } catch (error) {
+                alert('Bir hata oluştu: ' + error);
+            }
+        }
+
+        function deleteUser(userId) {
+            if (confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?')) {
+                fetch(`/delete_user/${userId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Kullanıcı başarıyla silindi.');
+                            location.reload();
+                        } else {
+                            alert('Hata: ' + data.error);
+                        }
+                    });
+            }
+        }
+
+        // Format datetime without timezone adjustment
+        function formatDateTime(timestamp) {
+            if (!timestamp) return '';
+
+            const date = new Date(timestamp);
+            // Add 3 hours to adjust for timezone
+            date.setHours(date.getHours() + 3);
+
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+
+            return `${day}.${month}.${year} ${hours}:${minutes}`;
+        }
+
+        // Socket.IO connection for real-time updates
+        document.addEventListener('DOMContentLoaded', function () {
+            const socket = io();
+
+            // Listen for user status updates
+            socket.on('user_status_change', function (data) {
+                const statusIndicator = document.getElementById(`status-indicator-${data.user_id}`);
+                if (statusIndicator) {
+                    if (data.is_active) {
+                        statusIndicator.classList.remove('bg-gray-500');
+                        statusIndicator.classList.add('bg-green-500');
+                    } else {
+                        statusIndicator.classList.remove('bg-green-500');
+                        statusIndicator.classList.add('bg-gray-500');
+                    }
+                }
+
+                // Update last seen time if provided
+                if (data.last_seen) {
+                    const lastSeenElement = document.getElementById(`last-seen-${data.user_id}`);
+                    if (lastSeenElement) {
+                        lastSeenElement.textContent = formatDateTime(data.last_seen);
+                    }
+                }
+            });
+
+            // Request initial status for all users
+            socket.emit('get_all_users_status');
+        });
     </script>
 </body>
 

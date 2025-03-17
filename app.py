@@ -97,6 +97,7 @@ def manage_rooms():
     
     rooms = db.session.query(Room).all()
     for room in rooms:
+        room.created_at_adjusted = room.created_at + timedelta(hours=3)  # Adjust created at time
         room.current_class_name, room.current_teacher = get_current_class_info(room)
     
     # Generate CSRF token
@@ -108,42 +109,16 @@ def manage_rooms():
 @app.route('/users', methods=['GET', 'POST'])
 @login_required
 def manage_users():
-    try:
+    if not current_user.role == UserRole.ADMIN:
+        flash('Bu sayfaya erişim yetkiniz yok', 'error')
+        return redirect(url_for('index'))
 
-        if not current_user.can_manage_users():
-            flash('Bu sayfaya erişim yetkiniz yok', 'error')
-            return redirect(url_for('index'))
-        
-        if request.method == 'POST':
-            username = request.form.get('username')
-            password = request.form.get('password')
-            email = request.form.get('email')
-            full_name = request.form.get('full_name')
-            role = request.form.get('role')
-            
-            user = User(
-                username=username,
-                email=email,
-                full_name=full_name,
-                role=role
-            )
-            user.set_password(password)
-            
-            db.session.add(user)
-            db.session.commit()
-            
-            flash('Kullanıcı başarıyla oluşturuldu', 'success')
-            return redirect(url_for('manage_users'))
-    except Exception as e:
-        if str({e}) == "{IntegrityError('(sqlite3.IntegrityError) UNIQUE constraint failed: users.username')}":
-            flash('Bu kullanıcı adı zaten kullanımda', 'error')
-            return redirect(url_for('manage_users'))
+    users = db.session.query(User).all()
+    for user in users:
+        if user.last_seen:
+            user.last_seen_adjusted = user.last_seen + timedelta(hours=3)  # Adjust last seen time
 
-        return jsonify({'error': str({e})}, 500)
-
-    
-    users = User.query.all()
-    return render_template('manage_users.html', users=users, roles=[UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT], user=current_user)
+    return render_template('manage_users.html', users=users, csrf_token=generate_csrf())
 
 # Kullanıcı güncelleme
 @app.route('/users/<int:user_id>/edit', methods=['POST'])
@@ -320,24 +295,26 @@ def list_room_members(room_id):
 @app.route('/api/rooms/<int:room_id>/messages')
 @login_required
 def get_room_messages(room_id):
-    room = Room.query.get_or_404(room_id)
+    room = db.session.get(Room, room_id)
     
-    # Kullanıcının odaya erişim yetkisi var mı kontrol et
-    if room not in current_user.rooms:
-        return jsonify({'error': 'Bu odaya erişim yetkiniz yok'}), 403
+    if not room:
+        return jsonify({'error': 'Room not found'}), 404
     
-    # Son 100 mesajı getir
-    messages = Message.query.filter_by(room_id=room_id)\
+    # Retrieve the last 100 messages for the room
+    messages = db.session.query(Message).filter_by(room_id=room_id)\
         .order_by(Message.created_at.asc())\
         .all()
     
-    return jsonify([{
+    # Prepare the messages with adjusted timestamps
+    adjusted_messages = [{
         'user': msg.author.username,
         'content': msg.content,
-        'timestamp': msg.created_at.strftime('%H:%M'),
+        'timestamp': (msg.created_at + timedelta(hours=3)).isoformat(),  # Adjust timestamp here
         'file_path': msg.file_path,
         'is_file': bool(msg.file_path)
-    } for msg in messages])
+    } for msg in messages]
+
+    return jsonify(adjusted_messages)
 
 # Dosya yükleme
 @app.route('/upload', methods=['POST'])
@@ -558,29 +535,32 @@ def on_disconnect():
 
 @socketio.on('message')
 def on_message(data):
+    if not current_user.is_authenticated:
+        emit('error', {'message': 'You must be logged in to send messages.'})
+        return
+
     room_id = data['room']
     message_content = data['message']
     room = db.session.get(Room, room_id)
     
     if not room:
-        emit('error', {'message': 'Oda bulunamadı'})
+        emit('error', {'message': 'Room not found'})
         return
     
     if not current_user.can_send_message(room):
-        emit('error', {'message': 'Bu odaya mesaj gönderme yetkiniz yok'})
+        emit('error', {'message': 'You do not have permission to send messages in this room.'})
         return
     
     message = Message(content=message_content, author=current_user, room=room)
     db.session.add(message)
     db.session.commit()
     
-    # Emit the message to the room without seen status information
+    # Emit the message with the original timestamp
     emit('message', {
         'user': current_user.username,
         'content': message_content,
-        'timestamp': message.created_at.strftime('%H:%M'),
-        'message_id': message.id,
-        'is_offline': not current_user.is_authenticated  # Keep this if needed
+        'timestamp': (message.created_at + timedelta(hours=3)).isoformat(),  # Adjust timestamp here
+        'is_file': False  # or True if it's a file
     }, room=room_id)
 
     # Send notification only to other users in the room
@@ -662,7 +642,7 @@ def get_current_class_info(room):
     
     # If it's Sunday, return "Ders yok"
     if current_day_turkish == 'Pazar':
-        return "Ders yok", ""
+        return "Ders yok0", ""
     
     # Define the lunch break time range
     lunch_start = datetime.strptime("12:00:00", "%H:%M:%S").time()
@@ -675,21 +655,21 @@ def get_current_class_info(room):
     # Get the schedule file
     schedule_file = ScheduleFile.query.filter_by(room_id=room.id).first()
     if not schedule_file:
-        return "Ders yok", ""  # No schedule file found
+        return "Ders programı yüklenmemiş", ""  # No schedule file found
 
     # Parse the schedule data
     try:
         file_path = os.path.join(app.config['SCHEDULES'], schedule_file.filename)
         schedule_data = parse_schedule(file_path)
     except Exception as e:
-        return "Ders yok", ""  # Error parsing schedule
+        return "Ders programı doğru yüklenmemiş", ""  # Error parsing schedule
 
     # Extract the class name from the room name
     room_class = extract_class_from_room_name(room.name)
     
     # If no class name could be extracted (e.g., "demo"), return "Ders yok"
     if not room_class:
-        return "Ders yok", ""
+        return "Ders programında geçerli bir sınıf değil", ""
     
     # Try different formats of the class name for matching
     possible_class_formats = []
@@ -744,7 +724,7 @@ def get_current_class_info(room):
     
     # If no matching schedule found, return "Ders yok"
     if not current_schedule:
-        return "Ders yok", ""
+        return "Ders programı yüklenmemiş", ""
 
     # Iterate through the schedule data to find the current class
     for entry in current_schedule:
@@ -865,7 +845,7 @@ def get_current_class_info(room):
         # If there's a next class today, show it with a "Sonraki Ders" prefix
         return f"Sonraki Ders: {next_class['subject']}", next_class['teacher']
     
-    return "Ders yok", ""  # No class currently or next, return "Ders yok" and empty teacher name
+    return "Dersler bitti", ""  # No class currently or next, return "Ders yok" and empty teacher name
 
 def extract_class_from_room_name(room_name):
     """

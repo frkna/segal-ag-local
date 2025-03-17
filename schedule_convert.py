@@ -10,8 +10,8 @@ def parse_schedule(file_path):
         "Salı":       range(9, 17),  # sütun 9-16
         "Çarşamba":   range(17, 25), # sütun 17-24
         "Perşembe":   range(25, 33), # sütun 25-32
-        "Cuma":       range(33, 41),  # sütun 33-40
-        "Cumartesi":  range(41, 49)   # sütun 41-48
+        "Cuma":       range(33, 41)  # sütun 33-40
+
     }
 
     # 3. satır (df.iloc[2]) her günün ders saatlerinin zaman aralıklarını içeriyor
