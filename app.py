@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, request
+from flask import Flask, render_template, request, session, redirect, url_for, flash, jsonify, request, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from database import db, User, Room, Message, UserRole, ScheduleFile
@@ -11,6 +11,7 @@ from flask_wtf.csrf import generate_csrf
 import pandas as pd
 from schedule_convert import parse_schedule
 import re
+from plyer import notification
 from sqlalchemy import text  # Import the text function
 
 # Flask uygulamasını oluştur
@@ -45,7 +46,7 @@ def load_user(user_id):
 @app.before_request
 def before_first_request():
     try:
-        db.session.execute(text('SELECT 1'))  # Use text() to declare the SQL expression
+        db.session.execute(text('SELECT 1'))
     except Exception as e:
         pass
 
@@ -56,8 +57,14 @@ def index():
     rooms = db.session.query(Room).filter(
         Room.members.any(id=current_user.id)
     ).all()
-    current_room = rooms[0]
-    return render_template('index.html', rooms=rooms, current_user=current_user, current_room=current_room)
+    if rooms:
+        current_room = rooms[0]
+        return render_template('index.html', rooms=rooms, current_user=current_user, current_room=current_room)
+    else:
+        first_room = Room(name="first room", description="first room", creator=current_user)
+        db.session.add(first_room)
+        db.session.commit()
+        return render_template('index.html', rooms=rooms, current_user=current_user, current_room=first_room)
 
 # Giriş sayfası
 @app.route('/login', methods=['GET', 'POST'])
@@ -147,12 +154,6 @@ def edit_user(user_id):
         if existing_user and existing_user.id != user_id:
             return jsonify({'error': 'Bu kullanıcı adı zaten kullanımda'}), 400
         user.username = data['username']
-    
-    if 'email' in data:
-        existing_user = User.query.filter_by(email=data['email']).first()
-        if existing_user and existing_user.id != user_id:
-            return jsonify({'error': 'Bu e-posta adresi zaten kullanımda'}), 400
-        user.email = data['email']
     
     if 'full_name' in data:
         user.full_name = data['full_name']
@@ -282,7 +283,6 @@ def list_users():
     return jsonify([{
         'id': user.id,
         'username': user.username,
-        'email': user.email,
         'full_name': user.full_name,
         'role': user.role,
         'is_active': user.is_active
@@ -374,8 +374,9 @@ def upload_file():
                 'user': current_user.username,
                 'file_path': filename,
                 'is_file': True,
-                'timestamp': datetime.now().strftime('%H:%M')
+                'timestamp': (message.created_at + timedelta(hours=3)).isoformat()
             }, room=room_id)
+            notification.notify(title=current_user.username, message=filename, timeout=5, app_name="ŞEGAL AĞ",app_icon="logo.ico")
             socketio.emit('play_sound', {'message': 'Yeni dosya alındı!'}, room=room_id)
             
             return jsonify({
@@ -399,6 +400,7 @@ def download_file(filename):
             download_name=filename  # Orijinal dosya adını koru
         )
     except Exception as e:
+        print(e)
         return jsonify({'error': 'Dosya bulunamadı'}), 404
 
 # Şifre sıfırlama
@@ -578,7 +580,7 @@ def on_message(data):
         'timestamp': (message.created_at + timedelta(hours=3)).isoformat(),  # Adjust timestamp here
         'is_file': False  # or True if it's a file
     }, room=room_id)
-
+    notification.notify(title=current_user.username, message=message_content, timeout=5, app_name="ŞEGAL AĞ",app_icon="logo.ico")
     # Send notification only to other users in the room
     if current_user.is_authenticated:
         emit('play_sound', {'message': 'Yeni mesaj alındı!'}, room=room_id, skip_sid=request.sid)  # Skip the sender
@@ -606,26 +608,30 @@ def init_db():
     with app.app_context():
         db.create_all()  # Create all tables
 
+
         # List of admin users to create
         admin_users = [
             {
                 'username': 'metinsözer',
-                'email': 'admin1@okul.com',
                 'full_name': 'Metin Sözer',
                 'password': '123'
             },
             {
                 'username': 'özenözcan',
-                'email': 'admin2@okul.com',
                 'full_name': 'Özen Özcan',
                 'password': '123'
             },
             {
                 'username': 'zekeriyakıldırıcı',
-                'email': 'admin3@okul.com',
                 'full_name': 'Zekeriya Kıldırıcı',
                 'password': '123'
-            }
+            },
+            {
+                'username': 'server',
+                'full_name': 'Ana Bilgisayar',
+                'password': '123'
+
+                }
         ]
 
         for user_data in admin_users:
@@ -635,7 +641,6 @@ def init_db():
                 # Create a new admin user
                 admin_user = User(
                     username=user_data['username'],
-                    email=user_data['email'],
                     full_name=user_data['full_name'],
                     role=UserRole.ADMIN
                 )

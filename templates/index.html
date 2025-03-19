@@ -573,7 +573,7 @@
             const button = document.createElement('button');
             button.setAttribute('data-room-id', data.id);
             button.onclick = () => switchRoom(data.id);
-            button.className = 'room-item w-full text-left px-4 py-2 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200';
+            button.className = 'room-item w-full text-left px-4 py- rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200';
             button.id = `room-${data.id}`;
             button.textContent = data.name;
             roomsList.appendChild(button);
